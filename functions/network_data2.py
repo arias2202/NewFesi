@@ -6,7 +6,7 @@ import re #Regular Expresions
 import numpy as np
 import warnings
 
-from interface_DeepFramework.DeepFramework import data_batch_generator, deep_model
+from interface_DeepFramework import data_batch_generator, deep_model
 
 from functions.neuron_data2 import NeuronData
 

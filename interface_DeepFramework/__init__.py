@@ -1,7 +1,8 @@
-"""Backend único de NeFESI: PyTorch flexible."""
+"""Interfaz única de framework para NeFESI (solo PyTorch flexible)."""
 
-from .pytorch_flex_functions import DeepModel as ModelType
-from .pytorch_flex_functions import DataBatchGenerator, get_preprocess_function
+from .pytorch_flex_functions import DeepModel
+from .pytorch_flex_functions import DataBatchGenerator
+from .pytorch_flex_functions import get_preprocess_function
 from .pytorch_flex_functions import _load_multiple_images, _load_single_image
 
 Type_Framework = "Pytorch_flexible"
@@ -10,7 +11,7 @@ channel_type = "channel_first"
 
 
 def deep_model(model_name):
-    return ModelType(model_name)
+    return DeepModel(model_name)
 
 
 def data_batch_generator(preprocessing_function, src_dataset, target_size, batch_size, color_mode):

@@ -1,6 +1,6 @@
 import numpy as np
 import os
-from interface_DeepFramework.DeepFramework import load_single_image, load_multiple_images
+from interface_DeepFramework import load_single_image, load_multiple_images
 from interface_DeepFramework.image_processing import array_to_img
 from scipy.ndimage.interpolation import rotate
 import warnings

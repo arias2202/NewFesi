@@ -21,7 +21,7 @@ from torchvision import models, transforms
 
 from functions.image import ImageDataset
 from functions.network_data2 import NetworkData
-import interface_DeepFramework.DeepFramework as DeepF
+from interface_DeepFramework import deep_model as build_deep_model
 
 
 DEFAULT_INPUT_SHAPE = [(1, 3, 224, 224)]
@@ -98,7 +98,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = load_model(args.model, args.weights, device=device)
-    deep_model = DeepF.deep_model(model)
+    deep_model = build_deep_model(model)
 
     layers_to_analyze = discover_conv_layers(model)
     if not layers_to_analyze:
