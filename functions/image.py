@@ -1,7 +1,6 @@
 import numpy as np
 import os
-from interface_DeepFramework import load_single_image, load_multiple_images
-from interface_DeepFramework.image_processing import array_to_img
+from functions.pytorch_integration import load_single_image, load_multiple_images, array_to_img
 from scipy.ndimage.interpolation import rotate
 import warnings
 import torch
@@ -9,6 +8,8 @@ from PIL import Image
 ACCEPTED_COLOR_MODES = ['rgb','grayscale']
 from torchvision import transforms
 import itertools
+import functools
+import inspect
 
 
 
@@ -444,6 +445,57 @@ class ImageDataset():
                           self.color_mode,
                           self.preprocessing_function)
 
+    def without_normalization(self):
+        """Returns a dataset copy whose preprocessing skips torchvision Normalize."""
+        return ImageDataset(
+            src_dataset=self.src_dataset,
+            target_size=self.target_size,
+            preprocessing_function=preprocessing_without_normalization(self.preprocessing_function),
+            color_mode=self.color_mode,
+            src_segmentation_dataset=self.src_segmentation_dataset,
+        )
+
+
+def preprocessing_without_normalization(preprocessing_function):
+    if preprocessing_function is None:
+        return None
+
+    if isinstance(preprocessing_function, transforms.Compose):
+        return transforms.Compose([
+            transform for transform in preprocessing_function.transforms
+            if not isinstance(transform, transforms.Normalize)
+        ])
+
+    if hasattr(preprocessing_function, 'transforms'):
+        filtered = [
+            transform for transform in preprocessing_function.transforms
+            if not isinstance(transform, transforms.Normalize)
+        ]
+        clone = copy_callable_with_transforms(preprocessing_function, filtered)
+        if clone is not None:
+            return clone
+
+    try:
+        signature = inspect.signature(preprocessing_function)
+    except (TypeError, ValueError):
+        signature = None
+
+    if signature is not None and 'normalize' in signature.parameters:
+        return functools.partial(preprocessing_function, normalize=False)
+
+    raise ValueError(
+        "Cannot remove transforms.Normalize from preprocessing_function. "
+        "Use torchvision.transforms.Compose or define the function with a normalize=True argument."
+    )
+
+
+def copy_callable_with_transforms(preprocessing_function, filtered_transforms):
+    try:
+        clone = preprocessing_function.__class__(filtered_transforms)
+    except TypeError:
+        return None
+    return clone
+
 def get_correspondences_array_in_ADE20K(image_segmented):
     labels_idx = np.unique(image_segmented[:, :, 2])
     indexes_array = np.zeros(np.max(labels_idx)+1, dtype=np.uint8)
@@ -610,4 +662,3 @@ def rotate_rf(img, rot_axis):
         return img.transpose(1, 0, 2)
     else:
         return None
-

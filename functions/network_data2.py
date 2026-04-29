@@ -6,7 +6,7 @@ import re #Regular Expresions
 import numpy as np
 import warnings
 
-from interface_DeepFramework import data_batch_generator, deep_model
+from functions.pytorch_integration import data_batch_generator, deep_model
 
 from functions.neuron_data2 import NeuronData
 
@@ -130,7 +130,7 @@ class NetworkData(object):
     def generate_neuron_data(self):
 
         for layer in self.layers_data:
-            if type(layer.neurons_data== int):
+            if isinstance(layer.neurons_data, int):
                 layer.neurons_data = [NeuronData(self.num_top_scoring, self.num_top_scoring, buffered_iterations=3) for x in range(layer.neurons_data)]
 
 
@@ -149,7 +149,8 @@ class NetworkData(object):
                      save_for_layers=True,
                      build_nf=True,
                      file_name=None,
-                     verbose=True):
+                     verbose=True,
+                     save_intermediate=True):
         """Evaluates the layers in `layer_names`, searching for the maximum
         activations for each neuron and build the neuron feature.
 
@@ -223,7 +224,7 @@ class NetworkData(object):
             # If the idx of the next last image will overpass the total num of images, ends the analysis
             if idx_end > num_images:
                 break
-            elif n_batches%1000==0 and n_batches!=0:
+            elif save_intermediate and n_batches%1000==0 and n_batches!=0:
                 self.save_to_disk(file_name=self.model.name+'PartialSave'+str(int((idx_start/data_batch.samples)*100))+
                                             'PerCent',erase_partials=True)
         if verbose:
@@ -232,7 +233,8 @@ class NetworkData(object):
             layer.sort_neuron_data()
             # Set the number of maximum activations stored in each neuron
             layer.set_max_activations()
-        self.save_to_disk(file_name=self.model.name+'PartialSave100WithoutNF', erase_partials=True)
+        if save_intermediate:
+            self.save_to_disk(file_name=self.model.name+'PartialSave100WithoutNF', erase_partials=True)
 
 
 
@@ -334,13 +336,14 @@ class NetworkData(object):
         self.save_to_disk(file_name=self.model.name+'PartialSave100WithoutNF', erase_partials=True)
 
 
-    def calculateNF(self):
+    def calculateNF(self, save_intermediate=True, file_name=None):
 
         for layer in self.layers_data:
             print(layer.layer_id)
             compute_nf(self, layer)
             print(layer.layer_id+ '   done!')
-            self.save_to_disk(file_name='imagenet64_decoder_'+layer.layer_id)
+            if save_intermediate:
+                self.save_to_disk(file_name=file_name or 'imagenet64_decoder_'+layer.layer_id)
 
 
     def calculateNF_out(self, model):
@@ -1290,8 +1293,7 @@ class NetworkData(object):
         if erase_partials:
             for file in os.listdir(self.save_path):
                 if 'PartialSave' in file:
-                    print(self.save_path+file)
-                    # os.remove(self.save_path+file)
+                    os.remove(os.path.join(self.save_path, file))
         with open(file_name, 'wb') as f:
             pickle.dump(self, f)
         self.model = model
@@ -1434,4 +1436,3 @@ def get_model_layer_names(model, regEx='.*'):
         regEx = re.compile(regEx)
         # Select the layerNames that satisfies RegEx
         return list(filter(regEx.match, [layer.name for layer in model.layers]))
-

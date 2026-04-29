@@ -1,7 +1,6 @@
 import numpy as np
 import os
-from interface_DeepFramework import load_single_image, load_multiple_images
-from interface_DeepFramework.image_processing import array_to_img
+from functions.pytorch_integration import load_single_image, load_multiple_images, array_to_img
 from scipy.ndimage.interpolation import rotate
 import warnings
 
@@ -430,4 +429,3 @@ def rotate_rf(img, rot_axis):
         return img.transpose(1, 0, 2)
     else:
         return None
-

@@ -1,6 +1,6 @@
 import numpy as np
 from PIL import Image
-from interface_DeepFramework.image_processing import array_to_img
+from functions.pytorch_integration import array_to_img
 import matplotlib.pyplot as plt
 def compute_nf(network_data, layer_data,  only_if_not_done=False):
     """This function build the neuron features (NF) for all neurons
@@ -12,23 +12,24 @@ def compute_nf(network_data, layer_data,  only_if_not_done=False):
 
 
 
-    for i, neuron in enumerate(layer_data.neurons_data):
-        if not only_if_not_done or neuron.neuron_feature is None:
-            neuron.norm_activations = neuron.activations / abs(neuron.activations)[0]
-            if neuron.norm_activations is not None:
-                norm_activations = neuron.norm_activations
+    original_dataset = network_data.dataset
+    if hasattr(original_dataset, 'without_normalization'):
+        network_data.dataset = original_dataset.without_normalization()
 
+    try:
+        for i, neuron in enumerate(layer_data.neurons_data):
+            if not only_if_not_done or neuron.neuron_feature is None:
+                neuron.norm_activations = neuron.activations / abs(neuron.activations)[0]
+                if neuron.norm_activations is not None:
+                    norm_activations = neuron.norm_activations
+                    patches = neuron.get_patches(network_data, layer_data)
+                else:
+                    print('why???')
 
-                patches = neuron.get_patches(network_data, layer_data)
-
-
-
-            else:
-                print('why???')
-
-
-        nf = np.sum(patches.reshape(patches.shape[0], -1) * (norm_activations / np.sum(norm_activations))[:, np.newaxis], axis=0).reshape(patches.shape[1:])
-        neuron.neuron_feature = nf
+            nf = np.sum(patches.reshape(patches.shape[0], -1) * (norm_activations / np.sum(norm_activations))[:, np.newaxis], axis=0).reshape(patches.shape[1:])
+            neuron.neuron_feature = nf
+    finally:
+        network_data.dataset = original_dataset
 
 
 
@@ -127,4 +128,3 @@ def compute_nf_guillem(network_data, layer_name, verbose=True,only_if_not_done=T
                 # if `norm_activations` from a neuron is None, that means this neuron
                 # doesn't have activations. NF is setting with None.
                 neuron.neuron_feature = None
-

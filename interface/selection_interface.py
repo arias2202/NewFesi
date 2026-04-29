@@ -19,7 +19,7 @@ from ..network_data import NetworkData
 from ..interface.interface import Interface
 from ..interface.make_analysis_interface import MakeAnalysisInterface
 
-from ..interface_DeepFramework import model_file_extension
+from functions.pytorch_integration import model_file_extension
 
 STYLE = 'clam'
 class SelectionInterface():

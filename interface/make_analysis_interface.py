@@ -23,7 +23,7 @@ except ImportError:
     from Tkinter import *
     from Tkinter import ttk
 
-from ..interface_DeepFramework import deep_model, model_file_extension
+from functions.pytorch_integration import deep_model, model_file_extension
 import dill as pickle
 import warnings
 class MakeAnalysisInterface():
