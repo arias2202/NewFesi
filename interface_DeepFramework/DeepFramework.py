@@ -1,48 +1,12 @@
-"""Abstracción del backend deep learning usado por NeFESI.
+"""Backend único de NeFESI: PyTorch flexible."""
 
-Backend soportado:
-- `Pytorch_flexible` (por defecto)
-- `Pytorch`
-- `Keras` (compatibilidad legacy)
+from .pytorch_flex_functions import DeepModel as ModelType
+from .pytorch_flex_functions import DataBatchGenerator, get_preprocess_function
+from .pytorch_flex_functions import _load_multiple_images, _load_single_image
 
-Puedes seleccionar backend con variable de entorno `NEFESI_FRAMEWORK`.
-"""
-
-from __future__ import annotations
-
-import os
-
-
-def _resolve_framework() -> str:
-    framework = os.getenv("NEFESI_FRAMEWORK", "Pytorch_flexible")
-    allowed = {"Keras", "Pytorch", "Pytorch_flexible"}
-    if framework not in allowed:
-        raise ValueError(
-            f"NEFESI_FRAMEWORK inválido: {framework}. Valores soportados: {sorted(allowed)}"
-        )
-    return framework
-
-
-Type_Framework = _resolve_framework()
-
-if Type_Framework == "Keras":
-    from .keras_functions import DeepModel as ModelType
-    from .keras_functions import DataBatchGenerator, get_preprocess_function
-    from .keras_functions import _load_multiple_images, _load_single_image
-    model_file_extension = "h5"
-    channel_type = "channel_last"
-elif Type_Framework == "Pytorch":
-    from .pytorch_functions import DeepModel as ModelType
-    from .pytorch_functions import DataBatchGenerator, get_preprocess_function
-    from .pytorch_functions import _load_multiple_images, _load_single_image
-    model_file_extension = "pkl"
-    channel_type = "channel_first"
-else:
-    from .pytorch_flex_functions import DeepModel as ModelType
-    from .pytorch_flex_functions import DataBatchGenerator, get_preprocess_function
-    from .pytorch_flex_functions import _load_multiple_images, _load_single_image
-    model_file_extension = "pkl"
-    channel_type = "channel_first"
+Type_Framework = "Pytorch_flexible"
+model_file_extension = "pkl"
+channel_type = "channel_first"
 
 
 def deep_model(model_name):
@@ -65,7 +29,6 @@ def load_multiple_images(
     preprocessing_function=None,
     prep_function=True,
 ):
-    """Carga múltiple de imágenes según el backend configurado."""
     return _load_multiple_images(
         src_dataset,
         img_list,
@@ -84,7 +47,6 @@ def load_single_image(
     preprocessing_function=None,
     prep_function=False,
 ):
-    """Carga una imagen en formato compatible con el backend configurado."""
     return _load_single_image(
         src_dataset,
         img_name,

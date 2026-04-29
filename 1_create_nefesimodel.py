@@ -48,13 +48,21 @@ def discover_conv_layers(model: torch.nn.Module) -> List[List[object]]:
     return [[name, 0] for name, module in model.named_modules() if name and isinstance(module, torch.nn.Conv2d)]
 
 
+def _load_state_dict(weights_path: str, device: torch.device):
+    """Carga robusta para PyTorch moderno (usa `weights_only=True` cuando está disponible)."""
+    try:
+        return torch.load(weights_path, map_location=device, weights_only=True)
+    except TypeError:
+        return torch.load(weights_path, map_location=device)
+
+
 def load_model(model_name: str, weights_path: str, device: torch.device) -> torch.nn.Module:
     if not hasattr(models, model_name):
         raise ValueError(f"Modelo torchvision no soportado: {model_name}")
 
     model_builder = getattr(models, model_name)
     model = model_builder()
-    state_dict = torch.load(weights_path, map_location=device)
+    state_dict = _load_state_dict(weights_path, device=device)
     model.load_state_dict(state_dict)
     model.eval()
     return model
