@@ -10,7 +10,7 @@ import matplotlib
 import torch
 matplotlib.use('tkagg')
 import matplotlib.pyplot as plt
-from interface_DeepFramework.DeepFramework import data_batch_generator
+from interface_DeepFramework import data_batch_generator
 
 NUM_THREADS = 10
 

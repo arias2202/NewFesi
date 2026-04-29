@@ -101,19 +101,18 @@ class DeepModel():
     def calculate_activations(self, layers_name, model_inputs):
         if not isinstance(layers_name, list):
             layers_name = [layers_name]
-        # in case that the inputs are numpy array instead of tensors.
 
-        # model_inputs = [model_in.to(self.device) for model_in in model_inputs]
-        # model_inputs = [model_inputs.to(self.device)]
         outputs = [LayerActivations(self.get_layer(layer)) for layer in layers_name]
 
+        if isinstance(model_inputs, (list, tuple)):
+            model_inputs = model_inputs[0]
+        model_inputs = model_inputs.to(self.device)
 
-        #
-        model_inputs=model_inputs[0].to(self.device)
-        self.pytorchmodel.forward(model_inputs)
+        with torch.inference_mode():
+            self.pytorchmodel(model_inputs)
+
         layer_outputs = [output.features for output in outputs]
 
-        # remove the hooks.
         for hook in outputs:
             hook.remove()
         return layer_outputs

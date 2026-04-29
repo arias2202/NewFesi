@@ -1,199 +1,162 @@
+"""CLI para crear un fichero NeFESI desde un modelo PyTorch.
+
+Flujo recomendado:
+1) Cargar una CNN + pesos.
+2) Analizar capas convolucionales.
+3) Guardar activaciones máximas por neurona.
+4) Calcular `neuron_feature` (weighted average de imágenes top-activadoras).
+5) Exportar visualizaciones (weighted average + mosaico top scoring).
 """
-This file contains a toy examples to have a first contact with Nefesi, and Keras.
-This file has been created with tensorflow (and tensorflow-gpu) 1.8.0, keras 2.2.0, and python 3.6 (with anaconda3 interpreter)
-"""
-import cv2
-import torch
-from torchvision import transforms
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+from typing import List
+
 import numpy as np
-import functools
+import torch
+from PIL import Image as PILImage
+from torchvision import models, transforms
+
+from functions.image import ImageDataset
 from functions.network_data2 import NetworkData
-import types
-import functions.GPUtil as gpu
-BATCH_SIZE = 100
-from  functions.image import ImageDataset
-from functions.read_activations import get_activations
-import interface_DeepFramework.DeepFramework as DeepF
-from Model_generation.Unet import UNet, CAN
-import torchvision.models as models
-import functions.GPUtil as gpu
-from torch import nn
-import gc
-import torchvision
-import os
-from PIL import Image as im
+from interface_DeepFramework import deep_model as build_deep_model
 
 
+DEFAULT_INPUT_SHAPE = [(1, 3, 224, 224)]
 
-def preproces_Resnet( imgs_hr):
 
-    preprocess = transforms.Compose([
+def build_preprocess(normalize: bool) -> transforms.Compose:
+    steps = [
         transforms.Resize(224),
         transforms.CenterCrop(224),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
-
-    tnsr=[preprocess(imgs_hr)]
-
-    return tnsr
-
-def preproces_Resnet2( imgs_hr):
-
-    preprocess = transforms.Compose([
-        transforms.Resize(224),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-    ])
-
-    tnsr = [preprocess(imgs_hr)]
-
-    return tnsr
+    ]
+    if normalize:
+        steps.append(
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225],
+            )
+        )
+    return transforms.Compose(steps)
 
 
+def discover_conv_layers(model: torch.nn.Module) -> List[List[object]]:
+    """Devuelve capas objetivo con formato NeFESI: [[layer_name, layer_index], ...]."""
+    return [[name, 0] for name, module in model.named_modules() if name and isinstance(module, torch.nn.Conv2d)]
 
 
-def main():
-
-    #Here You can find all the funcitons that allow us to visualize and quantify a trained Neural Network.
-    # To perform the calculation taking into acount the negative activations instead of positives, uncoment line 53 in the file read_activations
-
-
-    # Load the Model with your weigths first
-    # gpu.assignGPU()
-    # folder_dir ="C:/Users/arias/Desktop/Nefesi2022/"
-    folder_dir = "/home/guillem/Nefesi2022/"
-
-
-
-    model = models.resnet18()
-    model.load_state_dict(torch.load("/home/guillem/LoRA/lora-pytorch/weights/training_weights_64.pth"))
-
-
-    # # model.load_state_dict(torch.load('/home/guillem/Nefesi2022/nefesi/Ablation_final/VGG16_retrained100_4'))
-    # l = [[name, module] for name, module in model.named_modules() if not isinstance(module, nn.Sequential)]
-    #
-    # layers_to_analyze = [x[0] for x in l if isinstance(x[1], nn.Conv2d)]
-    #
-    # layers_to_analyze = [[x, 0] for x in layers_to_analyze]
-
-
-    deepmodel = DeepF.deep_model(model)
-
-    Path_images='/data/local/datasets/ImageNetFused/'
-
-
-    dataset = ImageDataset(src_dataset=Path_images,target_size=(224,224),preprocessing_function=preproces_Resnet,color_mode='rgb')
-    dataset2 = ImageDataset(src_dataset=Path_images,target_size=(224,224),preprocessing_function=preproces_Resnet2,color_mode='rgb')
-
-
-
-    # layers_interest=[['conv1',0],['layer1',0],['layer2',0],['layer3',0],['layer4',0],['fc',0]]
-    #
-    #
-    #
-    # # Path where you will save your results
-    # save_path= "Nefesi_models/Resnet18_grey_LoRA/"
-    # print(1)
-    # Nefesimodel = NetworkData(model=deepmodel, layer_data=layers_interest, save_path=save_path, dataset=dataset,
-    #                           default_file_name='Resnet18_grey_LoRA', input_shape=[(1, 3, 224, 224)])
-    # print(2)
-    # Nefesimodel.generate_neuron_data()
-    # print(3)
-    # Nefesimodel.save_to_disk("Resnet18_grey_LoRA_neurons")
-    #
-    #
-    # Nefesimodel.eval_network()
-    #
-    # print('Activation Calculus done!')
-    # Nefesimodel.save_to_disk('Resnet18_grey_LoRA_activation')
-    #
-    #
-    #
-    # Nefesimodel.dataset=dataset2
-    # Nefesimodel.calculateNF()
-    # print('NF done!')
-    # Nefesimodel.dataset = dataset
-    # Nefesimodel.save_to_disk('Resnet18_grey_LoRA_NF')
-    #
-
-
-    # calculate the Color selectivity of each neuron
-
-    Nefesimodel = NetworkData.load_from_disk(
-        'Nefesi_models/Resnet18_grey_LoRA/Resnet18_grey_LoRA_NF.obj')
-    Nefesimodel.model = deepmodel
-
-    for layer in Nefesimodel.get_layers_name():
-        layer_data = Nefesimodel.get_layer_by_name(layer)
-        print(layer)
-        for n in range(Nefesimodel.get_len_neurons_of_layer(layer)):
-            neurona = Nefesimodel.get_neuron_of_layer(layer, n)
-            neurona.color_selectivity_idx_new(Nefesimodel, layer_data, dataset)
-    Nefesimodel.save_to_disk('color_indx_Resnet18_grey_LoRA')
-
-    for layer in Nefesimodel.get_layers_name():
-        layer_data = Nefesimodel.get_layer_by_name(layer)
-        print(layer)
-        for n in range(Nefesimodel.get_len_neurons_of_layer(layer)):
-            neurona = Nefesimodel.get_neuron_of_layer(layer, n)
-            neurona.class_selectivity_idx()
-
-    Nefesimodel.save_to_disk('Final_Resnet18_grey_LoRA')
-
-    Nefesimodel._dataset = dataset2
-
-    initial_path = 'Nefesi_models/Resnet18_grey_LoRA/NF/'
-    initial_path2 = 'Nefesi_models/Resnet18_grey_LoRA/Top_scoring/'
-
+def _load_state_dict(weights_path: str, device: torch.device):
+    """Carga robusta para PyTorch moderno (usa `weights_only=True` cuando está disponible)."""
     try:
-        os.makedirs(initial_path)
-    except FileExistsError:
-        # directory already exists
-        pass
-
-    try:
-        os.makedirs(initial_path2)
-    except FileExistsError:
-        # directory already exists
-        pass
+        return torch.load(weights_path, map_location=device, weights_only=True)
+    except TypeError:
+        return torch.load(weights_path, map_location=device)
 
 
-    layers = Nefesimodel.get_layers_name()
+def load_model(model_name: str, weights_path: str, device: torch.device) -> torch.nn.Module:
+    if not hasattr(models, model_name):
+        raise ValueError(f"Modelo torchvision no soportado: {model_name}")
 
-    for layer in layers:
-        layer_path = initial_path + '/' + layer
-        layer_path2 = initial_path2 + '/' + layer
-
-        layer_data = Nefesimodel.get_layer_by_name(layer)
-        try:
-            os.makedirs(layer_path)
-        except FileExistsError:
-            # directory already exists
-            pass
-
-        try:
-            os.makedirs(layer_path2)
-        except FileExistsError:
-            # directory already exists
-            pass
-
-        print(layer)
-        for n in range(Nefesimodel.get_len_neurons_of_layer(layer)):
-            neurona = Nefesimodel.get_neuron_of_layer(layer, n)
-            # neurona2= Nefesimodel2.get_neuron_of_layer(layer, n)
-            NF = neurona.neuron_feature * 255
-            NF = im.fromarray(NF.astype(np.uint8)).resize((1000, 1000), resample=im.Resampling.NEAREST)
-
-            NF.save(layer_path + '/' + str(n) + '.jpg')
-            patches=im.fromarray((neurona.get_mosaic(Nefesimodel,layer_data)*255).astype(np.uint8)).resize((1000,1000),resample=im.Resampling.NEAREST)
+    model_builder = getattr(models, model_name)
+    model = model_builder()
+    state_dict = _load_state_dict(weights_path, device=device)
+    model.load_state_dict(state_dict)
+    model.eval()
+    return model
 
 
+def export_visual_assets(nefesi_model: NetworkData, out_dir: Path) -> None:
+    weighted_dir = out_dir / "NF"
+    top_scoring_dir = out_dir / "Top_scoring"
+    weighted_dir.mkdir(parents=True, exist_ok=True)
+    top_scoring_dir.mkdir(parents=True, exist_ok=True)
 
-            NF.save(layer_path+'/'+str(n)+'.jpg')
+    for layer_name in nefesi_model.get_layers_name():
+        layer_data = nefesi_model.get_layer_by_name(layer_name)
+        layer_weighted = weighted_dir / layer_name
+        layer_top = top_scoring_dir / layer_name
+        layer_weighted.mkdir(parents=True, exist_ok=True)
+        layer_top.mkdir(parents=True, exist_ok=True)
 
-            patches.save(layer_path2+'/'+str(n)+'.jpg')
+        for neuron_idx in range(nefesi_model.get_len_neurons_of_layer(layer_name)):
+            neuron = nefesi_model.get_neuron_of_layer(layer_name, neuron_idx)
+
+            weighted_avg = PILImage.fromarray((neuron.neuron_feature * 255).astype(np.uint8))
+            weighted_avg = weighted_avg.resize((1000, 1000), resample=PILImage.Resampling.NEAREST)
+            weighted_avg.save(layer_weighted / f"{neuron_idx}.jpg")
+
+            top_mosaic = neuron.get_mosaic(nefesi_model, layer_data)
+            top_mosaic_img = PILImage.fromarray((top_mosaic * 255).astype(np.uint8))
+            top_mosaic_img = top_mosaic_img.resize((1000, 1000), resample=PILImage.Resampling.NEAREST)
+            top_mosaic_img.save(layer_top / f"{neuron_idx}.jpg")
 
 
-if __name__ == '__main__':
-    main()
+def run_pipeline(args: argparse.Namespace) -> None:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    model = load_model(args.model, args.weights, device=device)
+    deep_model = build_deep_model(model)
+
+    layers_to_analyze = discover_conv_layers(model)
+    if not layers_to_analyze:
+        raise RuntimeError("No se encontraron capas convolucionales para analizar.")
+
+    dataset_for_activations = ImageDataset(
+        src_dataset=args.dataset,
+        target_size=(224, 224),
+        preprocessing_function=build_preprocess(normalize=True),
+        color_mode="rgb",
+    )
+
+    dataset_for_nf = ImageDataset(
+        src_dataset=args.dataset,
+        target_size=(224, 224),
+        preprocessing_function=build_preprocess(normalize=False),
+        color_mode="rgb",
+    )
+
+    save_dir = Path(args.output_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    nefesi_model = NetworkData(
+        model=deep_model,
+        layer_data=layers_to_analyze,
+        save_path=str(save_dir),
+        dataset=dataset_for_activations,
+        default_file_name=args.run_name,
+        input_shape=DEFAULT_INPUT_SHAPE,
+    )
+
+    nefesi_model.generate_neuron_data()
+    nefesi_model.save_to_disk(f"{args.run_name}_neurons")
+
+    nefesi_model.eval_network(batch_size=args.batch_size)
+    nefesi_model.save_to_disk(f"{args.run_name}_activations")
+
+    nefesi_model.dataset = dataset_for_nf
+    nefesi_model.calculateNF()
+    nefesi_model.dataset = dataset_for_activations
+    nefesi_model.save_to_disk(f"{args.run_name}_NF")
+
+    export_visual_assets(nefesi_model, save_dir)
+
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Genera un modelo NeFESI a partir de una CNN de PyTorch + pesos + dataset."
+    )
+    parser.add_argument("--model", default="resnet18", help="Nombre del modelo en torchvision.models")
+    parser.add_argument("--weights", required=True, help="Ruta al state_dict (.pth)")
+    parser.add_argument("--dataset", required=True, help="Ruta raíz del dataset (ImageFolder) ")
+    parser.add_argument("--output-dir", required=True, help="Directorio de salida para .obj + visualizaciones")
+    parser.add_argument("--run-name", default="nefesi_run", help="Prefijo para artefactos serializados")
+    parser.add_argument("--batch-size", type=int, default=64, help="Batch size para el barrido de activaciones")
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    run_pipeline(parse_args())
