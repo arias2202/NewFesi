@@ -5,3 +5,6 @@ __pycache__/
 Proba/
 SampleImagenet/
 archive/
+Corenet-s/.git/
+Corenet-s/**/__pycache__/
+Corenet-s/latest_checkpoint.pth.tar
