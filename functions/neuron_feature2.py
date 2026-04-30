@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from PIL import Image
 from functions.pytorch_integration import array_to_img
 import matplotlib.pyplot as plt
@@ -26,7 +27,13 @@ def compute_nf(network_data, layer_data,  only_if_not_done=False):
                 else:
                     print('why???')
 
-            nf = np.sum(patches.reshape(patches.shape[0], -1) * (norm_activations / np.sum(norm_activations))[:, np.newaxis], axis=0).reshape(patches.shape[1:])
+            device = getattr(getattr(network_data, "model", None), "device", None)
+            if device is not None and str(device).startswith("cuda"):
+                patches_tensor = torch.as_tensor(patches, dtype=torch.float32, device=device)
+                weights = torch.as_tensor(norm_activations / np.sum(norm_activations), dtype=torch.float32, device=device)
+                nf = torch.sum(patches_tensor * weights[:, None, None, None], dim=0).cpu().numpy()
+            else:
+                nf = np.sum(patches.reshape(patches.shape[0], -1) * (norm_activations / np.sum(norm_activations))[:, np.newaxis], axis=0).reshape(patches.shape[1:])
             neuron.neuron_feature = nf
     finally:
         network_data.dataset = original_dataset
@@ -58,7 +65,13 @@ def compute_nf_out(network_data, layer_data, model, only_if_not_done=False):
                 print('why???')
 
 
-        nf = np.sum(patches.reshape(patches.shape[0], -1) * (abs(norm_activations) / np.sum(abs(norm_activations)))[:, np.newaxis], axis=0).reshape(patches.shape[1:])
+        device = getattr(getattr(network_data, "model", None), "device", None)
+        if device is not None and str(device).startswith("cuda"):
+            patches_tensor = torch.as_tensor(patches, dtype=torch.float32, device=device)
+            weights = torch.as_tensor(abs(norm_activations) / np.sum(abs(norm_activations)), dtype=torch.float32, device=device)
+            nf = torch.sum(patches_tensor * weights[:, None, None, None], dim=0).cpu().numpy()
+        else:
+            nf = np.sum(patches.reshape(patches.shape[0], -1) * (abs(norm_activations) / np.sum(abs(norm_activations)))[:, np.newaxis], axis=0).reshape(patches.shape[1:])
         neuron.neuron_feature_out = nf
 
 

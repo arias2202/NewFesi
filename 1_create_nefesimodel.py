@@ -12,6 +12,16 @@ from PIL import Image as PILImage
 from torch import nn
 from torchvision import models, transforms
 
+for _np_alias, _python_type in (
+    ("float", float),
+    ("int", int),
+    ("bool", bool),
+    ("object", object),
+    ("str", str),
+):
+    if _np_alias not in np.__dict__:
+        setattr(np, _np_alias, _python_type)
+
 import functions.pytorch_integration as DeepF
 from functions.image import ImageDataset
 from functions.network_data2 import NetworkData
@@ -269,7 +279,7 @@ def main():
         save_path=args.save_path,
         dataset=dataset,
         default_file_name=args.object_name,
-        input_shape=[(1, 3, DEFAULT_INPUT_SIZE, DEFAULT_INPUT_SIZE)],
+        input_shape=(1, 3, DEFAULT_INPUT_SIZE, DEFAULT_INPUT_SIZE),
     )
 
     print("Generating neuron data")

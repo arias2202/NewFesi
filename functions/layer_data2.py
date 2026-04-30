@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import torch
 import math
+import operator
 from collections import OrderedDict
 from torch import nn
 import numpy as np
@@ -224,6 +225,126 @@ def rf_stride_pad_to_layer(model: nn.Module, layer_name: str, input_shape=(1,3,2
     return num_neurons, k_eff, s_eff, p_eff
 
 
+def rf_stride_pad_to_layer(model: nn.Module, layer_name: str, input_shape=(1, 3, 224, 224), device=None):
+    """
+    Return the channel count plus effective receptive field, stride, and padding.
+
+    Residual networks cannot be handled by treating every executed convolution
+    as one sequential chain. Downsample convolutions run in parallel with the
+    main branch, so their geometry must be merged at the residual add instead
+    of applied to every later layer.
+    """
+    model.eval()
+    if device is None:
+        device = next(model.parameters()).device
+
+    modules = dict(model.named_modules())
+    if layer_name not in modules:
+        raise KeyError(f"Layer '{layer_name}' not found. Example names: {list(modules.keys())[:20]}")
+
+    out_info = {}
+
+    def hook(_m, _inp, out):
+        out_info["shape"] = tuple(out.shape)
+
+    handle = modules[layer_name].register_forward_hook(hook)
+    with torch.no_grad():
+        model(torch.zeros(input_shape, device=device))
+    handle.remove()
+
+    if "shape" not in out_info:
+        raise RuntimeError(f"Layer '{layer_name}' was not executed in forward.")
+
+    out_shape = out_info["shape"]
+    num_neurons = out_shape[1] if len(out_shape) >= 2 else out_shape[-1]
+
+    try:
+        import torch.fx as fx
+    except ImportError as exc:
+        raise RuntimeError("torch.fx is required to compute receptive fields for PyTorch models.") from exc
+
+    traced = fx.symbolic_trace(model)
+    geometries = {}
+    target_geometry = None
+
+    def first_geometry(args):
+        for arg in args:
+            if isinstance(arg, fx.Node) and arg in geometries:
+                return geometries[arg]
+            if isinstance(arg, (list, tuple)):
+                geometry = first_geometry(arg)
+                if geometry is not None:
+                    return geometry
+        return None
+
+    def merge_geometries(args):
+        candidates = []
+        for arg in args:
+            if isinstance(arg, fx.Node) and arg in geometries:
+                candidates.append(geometries[arg])
+            elif isinstance(arg, (list, tuple)):
+                geometry = merge_geometries(arg)
+                if geometry is not None:
+                    candidates.append(geometry)
+        if not candidates:
+            return None
+        stride = candidates[0][0]
+        start = candidates[0][2]
+        receptive_field = max(geometry[1] for geometry in candidates)
+        return stride, receptive_field, start
+
+    def update_geometry(input_geometry, module):
+        stride, receptive_field, start = input_geometry
+        if isinstance(module, nn.Conv2d):
+            kernel_size = module.kernel_size[0]
+            module_stride = module.stride[0]
+            padding = module.padding[0]
+            dilation = module.dilation[0]
+        elif isinstance(module, (nn.MaxPool2d, nn.AvgPool2d)):
+            kernel_size = module.kernel_size if isinstance(module.kernel_size, int) else module.kernel_size[0]
+            module_stride = module.stride if module.stride is not None else kernel_size
+            module_stride = module_stride if isinstance(module_stride, int) else module_stride[0]
+            padding = module.padding if isinstance(module.padding, int) else module.padding[0]
+            dilation = 1
+        else:
+            return input_geometry
+
+        start = start + (((kernel_size - 1) * dilation) / 2 - padding) * stride
+        receptive_field = receptive_field + (kernel_size - 1) * dilation * stride
+        stride = stride * module_stride
+        return stride, receptive_field, start
+
+    for node in traced.graph.nodes:
+        if node.op == "placeholder":
+            geometries[node] = (1.0, 1.0, 0.5)
+        elif node.op == "call_module":
+            input_geometry = first_geometry(node.args)
+            if input_geometry is None:
+                continue
+            geometries[node] = update_geometry(input_geometry, modules[node.target])
+            if node.target == layer_name:
+                target_geometry = geometries[node]
+                break
+        elif node.op in ("call_function", "call_method"):
+            if node.target in (operator.add, torch.add, "add", "__add__"):
+                geometries[node] = merge_geometries(node.args)
+            else:
+                geometries[node] = first_geometry(node.args)
+        elif node.op == "output":
+            geometries[node] = first_geometry(node.args)
+
+    if target_geometry is None:
+        raise RuntimeError(f"Layer '{layer_name}' not found in torch.fx graph.")
+
+    stride, receptive_field, start = target_geometry
+    padding = ((receptive_field - 1) / 2) - (start - 0.5)
+
+    return (
+        num_neurons,
+        int(round(receptive_field)),
+        int(round(stride)),
+        int(round(padding)),
+    )
 
 
 def decoder_rf(model,input_shape,study_layer,main_input=None):
@@ -414,6 +535,4 @@ class LayerData(object):
                 if verbose:
                     print("Similarity "+self.layer_id+' '+str(i)+'/'+str(size))
             return self.similarity_index
-
-
 

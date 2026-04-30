@@ -148,7 +148,7 @@ class NeuronData(object):
         K=layer_data.receptive_field_Kernel
         S=layer_data.receptive_field_Stride
         P=layer_data.receptive_field_Padding
-        patches = np.zeros(shape=[self._max_activations,K,K,3], dtype=np.float)
+        patches = np.zeros(shape=[self._max_activations,K,K,3], dtype=float)
 
 
         for i in range(self._max_activations):
@@ -177,7 +177,7 @@ class NeuronData(object):
         K=layer_data.receptive_field_Kernel
         S=layer_data.receptive_field_Stride
         P=layer_data.receptive_field_Padding
-        patches = np.zeros(shape=[self._max_activations,K,K,3], dtype=np.float)
+        patches = np.zeros(shape=[self._max_activations,K,K,3], dtype=float)
 
         for i in range(self._max_activations):
 

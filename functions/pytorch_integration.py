@@ -155,6 +155,38 @@ class DeepModel():
             hook.remove()
         return layer_outputs
 
+    def calculate_max_activations(self, layers_name, model_inputs):
+        if not isinstance(layers_name, list):
+            layers_name = [layers_name]
+
+        outputs = [LayerActivationsTorch(self.get_layer(layer)) for layer in layers_name]
+        model_inputs = model_inputs[0].to(self.device, non_blocking=True)
+        with torch.no_grad():
+            self.pytorchmodel.forward(model_inputs)
+
+        layer_outputs = []
+        for output in outputs:
+            feature = output.features
+            if feature.ndim == 4:
+                batch_size, num_filters, height, width = feature.shape
+                flattened = feature.reshape(batch_size, num_filters, height * width)
+                max_acts, argmax_idx = flattened.max(dim=2)
+                row_locations = torch.div(argmax_idx, width, rounding_mode="floor")
+                col_locations = argmax_idx.remainder(width)
+                xy_locations = torch.stack((row_locations, col_locations), dim=2).permute(1, 0, 2)
+                layer_outputs.append((
+                    xy_locations.cpu().numpy(),
+                    max_acts.cpu().numpy(),
+                ))
+            elif feature.ndim == 2:
+                layer_outputs.append(feature.cpu().numpy())
+            else:
+                raise Exception("Unexpected shape.")
+
+        for hook in outputs:
+            hook.remove()
+        return layer_outputs
+
 
 class LayerActivations:
     def __init__(self, layer):
@@ -170,6 +202,17 @@ class LayerActivations:
             self.features = feature_np
         else:
             raise Exception("Unexpected shape.")
+
+    def remove(self):
+        self.hook.remove()
+
+
+class LayerActivationsTorch:
+    def __init__(self, layer):
+        self.hook = layer.register_forward_hook(self.hook_fn)
+
+    def hook_fn(self, module, input, output):
+        self.features = output.detach()
 
     def remove(self):
         self.hook.remove()
@@ -216,8 +259,8 @@ class ImageFolderWithPaths(ImageFolder):
         original_tuple = super(ImageFolderWithPaths, self).__getitem__(index)
         # the image file path
         path = self.imgs[index][0]
-        path_split = path.split('/')
-        filename = "{}/{}".format(path_split[-2], path_split[-1])
+        class_name = os.path.basename(os.path.dirname(path))
+        filename = "{}/{}".format(class_name, os.path.basename(path))
         # make a new tuple that includes original and the path
         tuple_with_path = (original_tuple + (filename,))
         return tuple_with_path

@@ -37,11 +37,13 @@ def get_activations(model, model_inputs, layers_name, only_max_and_argmax = True
     :return: List of activations, one output for each given layer.
             xy_locations, activations = get_activations(.....)
     """
-    layer_outputs = model.calculate_activations(layers_name, model_inputs)
-
     if not only_max_and_argmax:
+        layer_outputs = model.calculate_activations(layers_name, model_inputs)
         return layer_outputs
+    elif hasattr(model, "calculate_max_activations"):
+        return model.calculate_max_activations(layers_name, model_inputs)
     else:
+        layer_outputs = model.calculate_activations(layers_name, model_inputs)
         #locations_and_max = [get_argmax_and_max(layer) for layer in layer_outputs]
         with ThreadPool(processes=None) as pool:  # use all cpu cores
             # async_results = [pool.apply_async(get_argmax_and_max, (layer,)) for layer in layer_outputs]

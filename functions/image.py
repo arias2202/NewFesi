@@ -1,5 +1,7 @@
 import numpy as np
 import os
+import torch
+from collections import OrderedDict
 from functions.pytorch_integration import load_single_image, load_multiple_images, array_to_img
 from scipy.ndimage.interpolation import rotate
 import warnings
@@ -38,6 +40,8 @@ class ImageDataset():
         self.target_size = target_size
         self.preprocessing_function = preprocessing_function
         self.color_mode = color_mode
+        self._image_cache = OrderedDict()
+        self._image_cache_max_items = 512
 
     #---------------------------------------- SETTERS AND GETTERS -------------------------------------------
 
@@ -351,9 +355,38 @@ class ImageDataset():
 
         if preprocessing_function ==None:
             preprocessing_function=self.preprocessing_function
-        return load_single_image(self.src_dataset, img_name, self.color_mode, self.target_size,
-                                 preprocessing_function= preprocessing_function,
-                                 prep_function=prep_function)
+        if not hasattr(self, '_image_cache'):
+            self._image_cache = OrderedDict()
+            self._image_cache_max_items = 512
+
+        cache_key = (
+            img_name,
+            self.color_mode,
+            self.target_size,
+            id(preprocessing_function),
+            prep_function,
+        )
+        if cache_key in self._image_cache:
+            cached_image = self._image_cache.pop(cache_key)
+            self._image_cache[cache_key] = cached_image
+            return self._copy_cached_image(cached_image)
+
+        image = load_single_image(self.src_dataset, img_name, self.color_mode, self.target_size,
+                                  preprocessing_function= preprocessing_function,
+                                  prep_function=prep_function)
+        self._image_cache[cache_key] = self._copy_cached_image(image)
+        while len(self._image_cache) > self._image_cache_max_items:
+            self._image_cache.popitem(last=False)
+        return image
+
+    def _copy_cached_image(self, image):
+        if isinstance(image, list):
+            return [item.clone() if torch.is_tensor(item) else item.copy() for item in image]
+        if torch.is_tensor(image):
+            return image.clone()
+        if isinstance(image, np.ndarray):
+            return image.copy()
+        return image.copy()
 
 
     def get_concepts_of_region(self, image_name, crop_pos,  normalized = True, dataset_name='ADE20K',
