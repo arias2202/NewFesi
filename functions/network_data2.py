@@ -21,7 +21,7 @@ from functions.read_activations import fill_all_layers_data_batch,get_activation
 
 
 MIN_PROCESS_TIME_TO_OVERWRITE = 10
-ALL_INDEX_NAMES = ['symmetry', 'orientation', 'color', 'class', 'object', 'part']
+ALL_INDEX_NAMES = ['symmetry', 'orientation', 'color', 'class', 'object', 'part', 'label']
 
 class NetworkData(object):
     """This is the main class of nefesi package.
