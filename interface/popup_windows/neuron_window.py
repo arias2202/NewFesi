@@ -264,7 +264,7 @@ class NeuronWindow(object):
             elif label == 'color':
                 text = self.get_text_for_composed_index(label,idx)
 
-            elif label in ['class', 'object', 'part']:
+            elif label in ['class', 'object', 'part', 'label']:
                 text = self.get_text_for_composed_index(label,idx)
             elif label == 'orientation':
                 text = ' Orientation ('+str(orientation_degrees)+'º): ' \
@@ -340,6 +340,8 @@ class NeuronWindow(object):
                     text += label + '(' + str(round(value, ndigits=3)) + ')'
                 text += ')\n'
 
+        elif isinstance(index, dict) and 'label' in index:
+            text = index_name.capitalize() + ': ' + str(index['label']) + '\n'
         else:
             text = index_name.capitalize() + ': idx - ' + str(index)
         return text

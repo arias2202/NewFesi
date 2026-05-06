@@ -4,6 +4,7 @@ import os
 
 from functions.color_index import  get_shape_selectivity_index,get_color_selectivity_index_new,get_shape_selectivity_index_first_layer
 from functions.class_index import get_class_selectivity_idx, get_concept_selectivity_of_neuron,get_class_selectivity_idx_stroop
+from functions.label_index import get_label_selectivity_idx
 from functions.image import crop_center, expand_im
 from functions.relevance_index import get_relevance_idxex
 from functions.read_activations import get_activations_ablation_from_pos
@@ -669,6 +670,13 @@ class NeuronData(object):
 
 
 
+
+
+    def label_selectivity_idx(self, max_images=12):
+        key = 'label'
+        if key not in self.selectivity_idx:
+            self.selectivity_idx[key] = get_label_selectivity_idx(self, max_images=max_images)
+        return self.selectivity_idx[key]
 
     def class_selectivity_idx(self, labels=None, threshold=.1):
         """Returns the class selectivity index for this neuron.
